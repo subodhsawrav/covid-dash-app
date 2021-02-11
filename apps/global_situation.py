@@ -24,6 +24,7 @@ df = df.sort_index()
 # to allow for comparison
 df['cases per 1 mil'] = df['cases']/df['popData2018']*1000000
 df['deaths per 1 mil'] = df['deaths']/df['popData2018']*1000000
+df['adeaths per 1 mil'] = df['deaths']/df['popData2018']*1000000
 # exclude observations from the Japan cruise ship
 df = df[df.continentExp != 'Other']
 
@@ -44,6 +45,7 @@ df5 = df5.groupby(['continentExp','date']).sum()
 df5 = df5.reset_index()
 df5['cases per 1 mil'] = df5.groupby(['continentExp'])['cases per 1 mil'].apply(lambda x: x.cumsum())
 df5['deaths per 1 mil'] = df5.groupby(['continentExp'])['deaths per 1 mil'].apply(lambda x: x.cumsum())
+df5['adeaths per 1 mil'] = df5.groupby(['continentExp'])['adeaths per 1 mil'].apply(lambda x: x.cumsum())
 
 # good if there are many options
 available_countries = df['countriesAndTerritories'].unique()
@@ -58,16 +60,7 @@ layout = html.Div([
             dbc.Col(html.H6(children='Visualising trends across the world'), className="mb-4")
         ]),
 # choose between cases or deaths
-    dcc.Dropdown(
-        id='cases_or_deaths',
-        options=[
-            {'label': 'Cases per 1 million people', 'value': 'cases per 1 mil'},
-            {'label': 'Deaths per 1 million people', 'value': 'deaths per 1 mil'},
-        ],
-        value='cases per 1 mil',
-        #multi=True,
-        style={'width': '50%'}
-        ),
+
 # for some reason, font colour remains black if using the color option
     dbc.Row([
         dbc.Col(dbc.Card(html.H3(children='Daily figures by continent (per 1 million people)',
@@ -75,23 +68,40 @@ layout = html.Div([
         , className="mt-4 mb-4")
     ]),
     dbc.Row([
-        dbc.Col(html.H5(children='Latest update: 7 June 2020', className="text-center"),
-                         width=4, className="mt-4"),
-        dbc.Col(html.H5(children='Daily figures since 31 Dec 2019', className="text-center"), width=8, className="mt-4"),
-        ]),
-
+        dbc.Col(dcc.Dropdown(
+            id='cases_or_deaths',
+            options=[
+                {'label': 'Cases per 1 million people', 'value': 'cases per 1 mil'},
+                {'label': 'Deaths per 1 million people', 'value': 'deaths per 1 mil'},
+                {'label': 'ADeaths per 1 million people', 'value': 'adeaths per 1 mil'},
+            ],
+            value='cases per 1 mil',
+            #multi=True,
+            style={'width': '100%'}
+        ), width=3),
+        dbc.Col([
+            dbc.Row([
+                dbc.Col(html.H5(children='Latest update: 7 June 2020', className="text-center"),
+                         width=5, className="mt-4"),
+                dbc.Col(html.H5(children='Daily figures since 31 Dec 2019', className="text-center"), width=5, className="mt-4")
+            ]),
+            dbc.Row([
+                dbc.Col(dcc.Graph(id='pie_cases_or_adeaths'), width=6),
+                dbc.Col(dcc.Graph(id='line_cases_or_adeaths'), width=6)
+            ]),
+            dbc.Row([
+                dbc.Col(dcc.Graph(id='pie_cases_or_deaths'), width=6),
+                dbc.Col(dcc.Graph(id='line_cases_or_deaths'), width=6)
+            ])
+        ])
+    ]),
 
     dbc.Row([
-        dbc.Col(dcc.Graph(id='pie_cases_or_deaths'), width=4),
-        dbc.Col(dcc.Graph(id='line_cases_or_deaths'), width=8)
-        ]),
-
-        dbc.Row([
             dbc.Col(dbc.Card(html.H3(children='Cumulative figures by continent (per 1 million people)',
                                      className="text-center text-light bg-dark"), body=True, color="dark")
                     , className="mb-4")
         ]),
-        dbc.Row([
+    dbc.Row([
             dbc.Col(html.H5(children='Latest update: 7 June 2020', className="text-center"),
                     width=4, className="mt-4"),
             dbc.Col(html.H5(children='Cumulative figures since 31 Dec 2019', className="text-center"), width=8,
@@ -140,6 +150,8 @@ layout = html.Div([
 # display pie charts and line charts to show number of cases or deaths
 @app.callback([Output('pie_cases_or_deaths', 'figure'),
                Output('line_cases_or_deaths', 'figure'),
+               Output('pie_cases_or_adeaths', 'figure'),
+               Output('line_cases_or_adeaths', 'figure'),
                Output('total_pie_cases_or_deaths', 'figure'),
                Output('total_line_cases_or_deaths', 'figure')],
               [Input('cases_or_deaths', 'value')])
@@ -151,6 +163,32 @@ def update_graph(choice):
         ])
 
     fig.update_layout(paper_bgcolor='rgba(0,0,0,0)',
+                      plot_bgcolor='rgba(0,0,0,0)',
+                      template = "seaborn",
+                      margin=dict(t=0))
+
+
+    dff = df2.copy()
+    dff = pd.pivot_table(dff, values=choice, index=['date'], columns='continentExp')
+
+    fig12 = go.Figure()
+    for col in dff.columns:
+        fig12.add_trace(go.Scatter(x=dff.index, y=dff[col].values,
+                                 name=col,
+                                 mode='markers+lines'))
+
+    fig12.update_layout(yaxis_title='Number Per 1 Million',
+                       paper_bgcolor='rgba(0,0,0,0)',
+                       plot_bgcolor='rgba(0,0,0,0)',
+                       template = "seaborn",
+                       margin=dict(t=0))
+
+
+    fig21 = go.Figure(data=[
+        go.Pie(labels=df3['continentExp'], values=df3[choice])
+        ])
+
+    fig21.update_layout(paper_bgcolor='rgba(0,0,0,0)',
                       plot_bgcolor='rgba(0,0,0,0)',
                       template = "seaborn",
                       margin=dict(t=0))
@@ -194,7 +232,7 @@ def update_graph(choice):
                        template = "seaborn",
                        margin=dict(t=0))
 
-    return fig, fig2, fig3, fig4
+    return fig, fig2, fig12, fig21, fig3, fig4
 
 # to allow comparison of cases or deaths among countries
 @app.callback([Output('cases_or_deaths_country', 'figure'),
@@ -216,6 +254,7 @@ def update_graph(cases_or_deaths_name, countries_name):
     dfc2 = dfc2.reset_index()
     dfc2['cases per 1 mil'] = dfc2.groupby(['countriesAndTerritories'])['cases per 1 mil'].apply(lambda x: x.cumsum())
     dfc2['deaths per 1 mil'] = dfc2.groupby(['countriesAndTerritories'])['deaths per 1 mil'].apply(lambda x: x.cumsum())
+    dfc2['adeaths per 1 mil'] = dfc2.groupby(['countriesAndTerritories'])['adeaths per 1 mil'].apply(lambda x: x.cumsum())
 
     dfc2 = pd.pivot_table(dfc2, values=cases_or_deaths_name, index=['date'], columns='countriesAndTerritories')
 
